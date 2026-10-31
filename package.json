@@ -9,6 +9,8 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "dev:frontend": "npm run dev --workspace=@wannabe/frontend",
+    "build:frontend": "npm run build --workspace=@wannabe/frontend",
     "typecheck": "tsc -b",
     "test": "vitest run --passWithNoTests",
     "clean": "rimraf packages/*/dist packages/*/tsconfig.tsbuildinfo"
