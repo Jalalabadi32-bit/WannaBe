@@ -3,10 +3,13 @@ import fp from 'fastify-plugin';
 import fastifyJwt from '@fastify/jwt';
 import type { UserRole, AuthUser } from '@wannabe/shared';
 
-declare module 'fastify' {
-  interface FastifyRequest {
-    user?: AuthUser;
+declare module '@fastify/jwt' {
+  interface FastifyJWT {
+    user: AuthUser;
   }
+}
+
+declare module 'fastify' {
   interface FastifyInstance {
     authenticate: (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
     authorize: (allowedRoles: UserRole[]) => (request: FastifyRequest, reply: FastifyReply) => Promise<void>;
