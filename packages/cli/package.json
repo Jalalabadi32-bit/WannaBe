@@ -4,7 +4,7 @@
   "description": "Headless CLI runner for WANNABE source-to-package verification",
   "type": "module",
   "bin": {
-    "wannabe": "./dist/index.js"
+    "wannabe": "./dist/bin.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
