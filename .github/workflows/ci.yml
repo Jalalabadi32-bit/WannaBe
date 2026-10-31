@@ -33,3 +33,19 @@ jobs:
 
       - name: Run Test Suite
         run: npm test --if-present
+
+  security-sast:
+    name: Semgrep SAST Security Gate
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Run Semgrep SAST Scan
+        uses: returntocorp/semgrep-action@v1
+        with:
+          config: >-
+            p/javascript
+            p/typescript
+            p/owasp-top-ten
+            p/security-audit
