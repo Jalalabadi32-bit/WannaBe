@@ -7,6 +7,8 @@ import type {
   RiskLevel
 } from '@wannabe/shared';
 import type { IAIExplainer } from '../interfaces.js';
+import { createOllamaBreaker } from '../resilience/circuit-breaker.js';
+import type CircuitBreaker from 'opossum';
 
 export interface AIExplainerOptions {
   ollamaHost?: string;
@@ -14,6 +16,7 @@ export interface AIExplainerOptions {
   timeoutMs?: number;
   fetchFn?: typeof fetch;
   forceDeterministic?: boolean;
+  useBreaker?: boolean;
 }
 
 export class HybridAIExplainer implements IAIExplainer {
@@ -22,6 +25,7 @@ export class HybridAIExplainer implements IAIExplainer {
   private timeoutMs: number;
   private fetch: typeof fetch;
   private forceDeterministic: boolean;
+  private breaker?: CircuitBreaker<[ScanTarget, FileDiff[], SecurityFlag[], ScanSummary], AIVerdict>;
 
   constructor(options: AIExplainerOptions = {}) {
     this.ollamaHost = (options.ollamaHost ?? process.env['OLLAMA_HOST'] ?? 'http://localhost:11434').replace(/\/$/, '');
@@ -29,6 +33,12 @@ export class HybridAIExplainer implements IAIExplainer {
     this.timeoutMs = options.timeoutMs ?? 2000;
     this.fetch = options.fetchFn ?? globalThis.fetch;
     this.forceDeterministic = options.forceDeterministic ?? false;
+
+    if (options.useBreaker) {
+      this.breaker = createOllamaBreaker(async (t, d, f, s) => {
+        return this.callOllamaDirect(t, d, f, s);
+      });
+    }
   }
 
   async explain(
@@ -42,14 +52,17 @@ export class HybridAIExplainer implements IAIExplainer {
     }
 
     try {
-      return await this.callOllama(target, diffs, flags, summary);
+      if (this.breaker) {
+        return await this.breaker.fire(target, diffs, flags, summary);
+      }
+      return await this.callOllamaDirect(target, diffs, flags, summary);
     } catch {
-      // Graceful fallback to deterministic rule engine if Ollama is unreachable
+      // Graceful fallback to deterministic rule engine if Ollama is unreachable or breaker is open
       return this.generateDeterministicVerdict(target, diffs, flags, summary);
     }
   }
 
-  private async callOllama(
+  private async callOllamaDirect(
     target: ScanTarget,
     diffs: FileDiff[],
     flags: SecurityFlag[],

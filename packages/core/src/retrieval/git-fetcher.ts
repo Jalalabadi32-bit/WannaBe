@@ -2,22 +2,39 @@ import fsp from 'node:fs/promises';
 import path from 'node:path';
 import type { ISourceFetcher, ISandboxManager } from '../interfaces.js';
 import { SandboxManager } from '../sandbox/extractor.js';
+import { createGitBreaker } from '../resilience/circuit-breaker.js';
+import type CircuitBreaker from 'opossum';
 
 export interface GitFetcherOptions {
   githubToken?: string;
   fetchFn?: typeof fetch;
   sandbox?: ISandboxManager;
+  useBreaker?: boolean;
 }
 
 export class GitFetcher implements ISourceFetcher {
   private token?: string;
   private fetch: typeof fetch;
   private sandbox: ISandboxManager;
+  private breaker?: CircuitBreaker<[string, RequestInit?], Response>;
 
   constructor(options: GitFetcherOptions = {}) {
     this.token = options.githubToken ?? process.env['GITHUB_TOKEN'];
     this.fetch = options.fetchFn ?? globalThis.fetch;
     this.sandbox = options.sandbox ?? new SandboxManager();
+
+    if (options.useBreaker) {
+      this.breaker = createGitBreaker(async (url: string, init?: RequestInit) => {
+        return this.fetch(url, init);
+      });
+    }
+  }
+
+  private async executeFetch(url: string, init?: RequestInit): Promise<Response> {
+    if (this.breaker) {
+      return this.breaker.fire(url, init);
+    }
+    return this.fetch(url, init);
   }
 
   async fetchSource(repoUrl: string, gitTag: string, destinationDir: string): Promise<void> {
@@ -32,7 +49,7 @@ export class GitFetcher implements ISourceFetcher {
       headers['Authorization'] = `Bearer ${this.token}`;
     }
 
-    const res = await this.fetch(archiveUrl, { headers });
+    const res = await this.executeFetch(archiveUrl, { headers });
     if (!res.ok) {
       if (res.status === 404) {
         throw new Error(`Git release tag ${gitTag} not found for repository ${owner}/${repo}`);
