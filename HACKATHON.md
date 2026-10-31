@@ -50,7 +50,7 @@ Modern software development relies heavily on third-party package registries lik
 - **Silent Discrepancies**: Subtle modifications made to compiled artifacts (`dist/`) that deviate from reproducible build outputs of `src/`.
 
 **WANNABE** solves this challenge by answering one critical question:  
-👉 **Does the published package actually match its claimed source code?**
+**Does the published package actually match its claimed source code?**
 
 ---
 
