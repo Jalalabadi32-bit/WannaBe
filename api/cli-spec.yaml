@@ -1,0 +1,88 @@
+cli:
+  name: wannabe
+  description: Automated Software Supply Chain Security & Source-to-Package Verification CLI
+  version: 0.1.0
+
+commands:
+  - name: scan
+    description: Run a source-to-package verification scan comparing an npm package against its GitHub repository.
+    arguments:
+      - name: package
+        description: Published npm package name (e.g., 'express', 'chalk')
+        required: true
+        type: string
+    options:
+      - flag: -v, --version <version>
+        description: Target package release version (e.g., '5.3.0')
+        required: true
+        type: string
+        env: WANNABE_PACKAGE_VERSION
+
+      - flag: -r, --repo <url>
+        description: Git source repository URL. If omitted, attempts lookup from package.json repository field.
+        required: false
+        type: string
+        env: WANNABE_REPO_URL
+
+      - flag: -t, --tag <tag>
+        description: Git release tag corresponding to release. If omitted, defaults to 'v<version>' or '<version>'.
+        required: false
+        type: string
+        env: WANNABE_GIT_TAG
+
+      - flag: -f, --format <format>
+        description: Report output format
+        required: false
+        type: enum
+        choices: [table, json, sarif]
+        default: table
+
+      - flag: -o, --output <path>
+        description: Save scan report to destination file path instead of stdout
+        required: false
+        type: string
+
+      - flag: --fail-on <level>
+        description: Exit with non-zero status code if findings meet or exceed severity threshold
+        required: false
+        type: enum
+        choices: [never, warning, critical]
+        default: critical
+
+      - flag: --ollama-host <url>
+        description: Local or remote Ollama endpoint for Gemma inference
+        required: false
+        type: string
+        default: http://localhost:11434
+        env: OLLAMA_HOST
+
+      - flag: --offline
+        description: Force deterministic rule-based analysis without invoking Ollama
+        required: false
+        type: boolean
+        default: false
+
+      - flag: --verbose
+        description: Enable debug diagnostic logging to stderr
+        required: false
+        type: boolean
+        default: false
+
+  - name: version
+    description: Display CLI version, engine version, and system information.
+
+  - name: health
+    description: Probe local Ollama and extraction sandbox readiness.
+
+exitCodes:
+  0: Verification completed clean or findings below fail-on threshold.
+  1: General execution or parameter error.
+  2: Network retrieval failure (npm registry or git repository unreachable).
+  3: Security violation detected (Zip-Slip attempt, sandbox quota exceeded).
+  4: Security threshold exceeded (findings met or exceeded --fail-on level).
+
+environmentVariables:
+  WANNABE_API_KEY: Authentication key when connecting to remote WANNABE API server.
+  WANNABE_API_URL: Base URL for remote WANNABE API server (e.g., http://localhost:3000).
+  OLLAMA_HOST: Host address for local Gemma inference.
+  GITHUB_TOKEN: Optional GitHub Personal Access Token to avoid GitHub API rate limits.

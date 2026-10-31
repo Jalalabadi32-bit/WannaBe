@@ -110,12 +110,14 @@ WANNABE performs multi-stage verification comparing an npm package release again
 | Layer | Component | Description |
 |---|---|---|
 | **Frontend** | React 18, TypeScript, Vite, Tailwind CSS | High-performance interactive dashboard for inspecting file diffs, risk scores, and evidence trees |
-| **Backend** | Python 3, FastAPI, Pydantic | Asynchronous REST API orchestrating retrieval, extraction, and scanner execution |
-| **Local AI Engine** | Google Gemma 4 E4B / E2B | Local LLM inference executed via **Ollama** on NVIDIA RTX 5050 GPU |
-| **Package Engine** | npm Registry API, `pacote` | Secure tarball downloading and metadata extraction |
+| **Backend & API** | Node.js 22, Fastify, TypeScript | Ultra-high performance, asynchronous REST API orchestrating retrieval, extraction, and scanner execution |
+| **Shared Domain** | `@wannabe/shared` (TypeScript, Zod) | Zero-drift shared data contracts, validation schemas, and risk models across CLI, API, Core, and React |
+| **Local AI Engine** | Google Gemma 4 E4B / E2B | Local LLM inference executed via **Ollama** on NVIDIA RTX 5050 GPU (with deterministic rule-based fallback) |
+| **Package Engine** | npm Registry API, `pacote`, `tar` | Secure tarball downloading and metadata extraction with Zip-Slip path-traversal protection |
 | **Source Engine** | GitHub REST API, Git CLI | Repository cloning, tag matching, and commit verification |
-| **Analysis Core** | SHA-256, AST parsers, regex heuristics | Deterministic structural, syntactic, and cryptographic analysis |
-| **Test & CI** | `pytest`, GitHub Actions | Automated regression testing and security verification suites |
+| **Analysis Core** | `@babel/parser`, `@babel/traverse`, SHA-256, Shannon entropy | Deterministic structural, syntactic, and cryptographic analysis |
+| **CLI Runner** | `@wannabe/cli`, Commander | Standalone headless scanner generating formatted terminal tables, JSON, and SARIF output |
+| **Test & CI** | Vitest, GitHub Actions | Automated regression testing, strict type-checking, and security verification suites |
 
 ---
 

