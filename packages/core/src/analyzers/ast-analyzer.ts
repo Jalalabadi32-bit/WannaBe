@@ -78,7 +78,7 @@ export class ASTAnalyzer implements IASTAnalyzer {
               ruleId: 'WANNABE-AST-FUNCTION-CONSTRUCTOR',
               severity: 'high',
               category: 'eval_execution',
-              message: 'Dynamic code execution via new Function() constructor detected.',
+              message: 'Dynamic code execution via Function() constructor detected.',
               filePath,
               lineRange: [line, line],
               snippet: getSnippet(line)
@@ -114,6 +114,23 @@ export class ASTAnalyzer implements IASTAnalyzer {
             severity: 'high',
             category: 'network_exfil',
             message: `Low-level network connection via .${callee.property.name}() detected.`,
+            filePath,
+            lineRange: [line, line],
+            snippet: getSnippet(line)
+          });
+        }
+      },
+
+      NewExpression(pathNode: any) {
+        const callee = pathNode.node.callee;
+        const line = pathNode.node.loc?.start.line ?? 1;
+
+        if (callee.type === 'Identifier' && callee.name === 'Function') {
+          flags.push({
+            ruleId: 'WANNABE-AST-FUNCTION-CONSTRUCTOR',
+            severity: 'high',
+            category: 'eval_execution',
+            message: 'Dynamic code execution via new Function() constructor detected.',
             filePath,
             lineRange: [line, line],
             snippet: getSnippet(line)
