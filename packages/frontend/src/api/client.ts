@@ -28,7 +28,7 @@ export interface RecentScansResponse {
   items: ScanReport[];
 }
 
-// TODO: track future WebSocket / SSE streaming connection for live scan event logs
+// SSE streaming is implemented via GET /api/v1/scans/:id/stream using the native EventSource API.
 class ApiClient {
   private getHeaders(): Record<string, string> {
     return {
@@ -111,6 +111,44 @@ class ApiClient {
     } catch {
       return [];
     }
+  }
+
+  /**
+   * Open a Server-Sent Events stream for live scan progress updates.
+   *
+   * Calls onStatus on every progress frame. Calls onClose when the scan
+   * reaches a terminal state (completed / failed) or the connection drops.
+   *
+   * Returns a cleanup function — call it to close the EventSource manually
+   * (e.g., on React component unmount).
+   */
+  streamScanProgress(
+    scanId: string,
+    onStatus: (status: ScanStatus) => void,
+    onClose: () => void
+  ): () => void {
+    const url = `${API_BASE}/api/v1/scans/${encodeURIComponent(scanId)}/stream`;
+    const es = new EventSource(url);
+
+    es.onmessage = (event: MessageEvent) => {
+      try {
+        const { status } = JSON.parse(event.data as string) as { scanId: string; status: ScanStatus };
+        onStatus(status);
+        if (status === 'completed' || status === 'failed') {
+          es.close();
+          onClose();
+        }
+      } catch {
+        // malformed frame — ignore
+      }
+    };
+
+    es.onerror = () => {
+      es.close();
+      onClose();
+    };
+
+    return () => es.close();
   }
 }
 
