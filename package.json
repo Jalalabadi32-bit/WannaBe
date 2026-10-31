@@ -10,7 +10,7 @@
   "scripts": {
     "build": "npm run build --workspaces --if-present",
     "typecheck": "tsc -b",
-    "test": "vitest run",
+    "test": "vitest run --passWithNoTests",
     "clean": "rimraf packages/*/dist packages/*/tsconfig.tsbuildinfo"
   },
   "devDependencies": {
