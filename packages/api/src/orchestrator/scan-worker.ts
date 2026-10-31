@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 import { readFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import type { ScanReport, ScanTarget, FileDiff } from '@wannabe/shared';
+import EventEmitter from 'node:events';
+import type { ScanReport, ScanTarget, ScanStatus, FileDiff } from '@wannabe/shared';
 import {
   SandboxManager,
   NpmFetcher,
@@ -12,7 +13,28 @@ import {
   HybridAIExplainer
 } from '@wannabe/core';
 
-// In-memory scan store — swap for Redis in a follow-up
+// Typed event bus for real-time scan lifecycle events.
+// Subscribers: SSE route (packages/api/src/routes/scans.ts).
+// TODO: swap emitter subscriber for Redis pub/sub (SUBSCRIBE wannabe:scan:*)
+//       once a persistent multi-replica deployment is needed.
+type ScanEvents = {
+  progress: (scanId: string, status: ScanStatus) => void;
+  done: (scanId: string) => void;
+};
+
+// Inline typed-emitter interface so we keep IDE-level event type safety
+// without pulling in a runtime dependency.
+interface TypedScanBus extends EventEmitter {
+  emit<E extends keyof ScanEvents>(event: E, ...args: Parameters<ScanEvents[E]>): boolean;
+  on<E extends keyof ScanEvents>(event: E, listener: ScanEvents[E]): this;
+  off<E extends keyof ScanEvents>(event: E, listener: ScanEvents[E]): this;
+  once<E extends keyof ScanEvents>(event: E, listener: ScanEvents[E]): this;
+}
+
+export const scanBus = new EventEmitter() as TypedScanBus;
+scanBus.setMaxListeners(0); // allow one listener per active SSE connection
+
+// In-memory scan store — suitable for single-instance dev; swap backing store for Redis
 const scanStore = new Map<string, ScanReport>();
 
 export function getScan(scanId: string): ScanReport | undefined {
@@ -51,6 +73,7 @@ async function runScan(scanId: string, target: ScanTarget): Promise<void> {
 
   try {
     patch(scanId, { status: 'fetching' });
+    scanBus.emit('progress', scanId, 'fetching');
 
     const npmFetcher = new NpmFetcher();
     const gitFetcher = new GitFetcher();
@@ -64,6 +87,7 @@ async function runScan(scanId: string, target: ScanTarget): Promise<void> {
 
     // Extract npm tarball in-place
     patch(scanId, { status: 'extracting' });
+    scanBus.emit('progress', scanId, 'extracting');
     await sandbox.safeExtractTarball(tarballPath, workspace.packageDir);
 
     // Fetch GitHub source into workspace source dir
@@ -73,6 +97,7 @@ async function runScan(scanId: string, target: ScanTarget): Promise<void> {
 
     // Compare directories
     patch(scanId, { status: 'analyzing' });
+    scanBus.emit('progress', scanId, 'analyzing');
     const comparator = new GhostCodeComparator();
     const { fileDiffs, summary: rawSummary } = await comparator.compareDirectories(
       workspace.sourceDir,
@@ -106,6 +131,7 @@ async function runScan(scanId: string, target: ScanTarget): Promise<void> {
 
     // AI explanation
     patch(scanId, { status: 'evaluating_ai' });
+    scanBus.emit('progress', scanId, 'evaluating_ai');
     const explainer = new HybridAIExplainer();
     const verdict = await explainer.explain(target, fileDiffs, allFlags, rawSummary);
 
@@ -117,6 +143,8 @@ async function runScan(scanId: string, target: ScanTarget): Promise<void> {
       aiVerdict: verdict,
       summary: rawSummary
     });
+    scanBus.emit('progress', scanId, 'completed');
+    scanBus.emit('done', scanId);
   } finally {
     await workspace.cleanup();
   }
