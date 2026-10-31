@@ -58,30 +58,31 @@ export const App: React.FC = () => {
       try {
         const { scanId } = await apiClient.triggerScan(target);
 
-        // Polling loop
-        const interval = setInterval(async () => {
-          try {
-            const statusRes = await apiClient.getScanStatus(scanId);
-            setScanStatus(statusRes.status);
-
-            if (statusRes.status === 'completed') {
-              clearInterval(interval);
-              const fullReport = await apiClient.getScanReport(scanId);
-              setActiveReport(fullReport);
-              setRecentScans((prev) => [fullReport, ...prev.filter((s) => s.id !== fullReport.id)]);
-              setIsScanning(false);
-            } else if (statusRes.status === 'failed') {
-              clearInterval(interval);
-              setScanError(statusRes.error || 'Verification scan encountered an execution error');
-              setIsScanning(false);
+        // SSE real-time progress — single persistent connection, no polling
+        const closeStream = apiClient.streamScanProgress(
+          scanId,
+          (status) => {
+            setScanStatus(status);
+          },
+          async () => {
+            // Terminal state reached (completed or failed) or connection dropped
+            closeStream();
+            try {
+              const statusRes = await apiClient.getScanStatus(scanId);
+              if (statusRes.status === 'completed') {
+                const fullReport = await apiClient.getScanReport(scanId);
+                setActiveReport(fullReport);
+                setRecentScans((prev) => [fullReport, ...prev.filter((s) => s.id !== fullReport.id)]);
+              } else if (statusRes.status === 'failed') {
+                setScanError(statusRes.error || 'Verification scan encountered an execution error');
+              }
+            } catch (fetchErr: unknown) {
+              const msg = fetchErr instanceof Error ? fetchErr.message : String(fetchErr);
+              setScanError(msg);
             }
-          } catch (pollErr: unknown) {
-            clearInterval(interval);
-            const msg = pollErr instanceof Error ? pollErr.message : String(pollErr);
-            setScanError(msg);
             setIsScanning(false);
           }
-        }, 1500);
+        );
       } catch (err: unknown) {
         const msg = err instanceof Error ? err.message : String(err);
         setScanError(msg);
