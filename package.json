@@ -13,6 +13,7 @@
     "build:frontend": "npm run build --workspace=@wannabe/frontend",
     "typecheck": "tsc -b",
     "test": "vitest run --passWithNoTests",
+    "coverage": "vitest run --coverage --passWithNoTests",
     "clean": "rimraf packages/*/dist packages/*/tsconfig.tsbuildinfo"
   },
   "devDependencies": {
