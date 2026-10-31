@@ -1,0 +1,42 @@
+groups:
+  - name: wannabe-operational-alerts
+    rules:
+      - alert: WannabeHighErrorRate
+        expr: rate(http_requests_total{status=~"5.."}[5m]) / rate(http_requests_total[5m]) > 0.05
+        for: 2m
+        labels:
+          severity: critical
+          tier: api-gateway
+        annotations:
+          summary: "High HTTP 5xx error rate detected on WANNABE API"
+          description: "Over 5% of API requests returned 5xx status codes over the last 5 minutes."
+
+      - alert: WannabeCircuitBreakerOpen
+        expr: wannabe_circuit_breaker_state{state="open"} == 1
+        for: 1m
+        labels:
+          severity: warning
+          tier: core-engine
+        annotations:
+          summary: "Circuit breaker is in OPEN state"
+          description: "Circuit breaker for {{ $labels.breaker }} has tripped open and is failing fast."
+
+      - alert: WannabeRateLimitSpike
+        expr: rate(http_requests_total{status="429"}[5m]) > 5
+        for: 3m
+        labels:
+          severity: warning
+          tier: rate-limit
+        annotations:
+          summary: "High rate of HTTP 429 rate limit rejections"
+          description: "Elevated rate of 429 responses indicates possible scanning abuse or client misconfiguration."
+
+      - alert: WannabeSlowScans
+        expr: histogram_quantile(0.95, rate(wannabe_scan_duration_seconds_bucket[5m])) > 60
+        for: 5m
+        labels:
+          severity: warning
+          tier: orchestrator
+        annotations:
+          summary: "95th percentile verification scan duration exceeds 60 seconds"
+          description: "Verification scans are experiencing high extraction or inference latency."
