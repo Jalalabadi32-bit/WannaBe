@@ -34,6 +34,9 @@ jobs:
       - name: Run Test Suite
         run: npm test --if-present
 
+      - name: Coverage Gate
+        run: npm run coverage
+
   security-sast:
     name: Semgrep SAST Security Gate
     runs-on: ubuntu-latest
