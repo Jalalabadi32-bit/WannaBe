@@ -278,6 +278,37 @@ describe('Fastify REST API Server Route Injections', () => {
       await corsApp.close();
     });
 
+    it('matches wildcard CORS patterns like https://*.vercel.app', async () => {
+      process.env['CORS_ORIGIN'] = 'https://*.vercel.app';
+      const wildcardApp = buildApp({
+        jwtSecret: 'test-secret',
+        apiKey: 'test-key'
+      });
+      await wildcardApp.ready();
+
+      const resVercel = await wildcardApp.inject({
+        method: 'OPTIONS',
+        url: '/healthz',
+        headers: {
+          origin: 'https://wannabe-frontend-preview-123.vercel.app',
+          'access-control-request-method': 'GET'
+        }
+      });
+      expect(resVercel.headers['access-control-allow-origin']).toBe('https://wannabe-frontend-preview-123.vercel.app');
+
+      const resRejected = await wildcardApp.inject({
+        method: 'OPTIONS',
+        url: '/healthz',
+        headers: {
+          origin: 'https://malicious-site.com',
+          'access-control-request-method': 'GET'
+        }
+      });
+      expect(resRejected.headers['access-control-allow-origin']).toBeUndefined();
+
+      await wildcardApp.close();
+    });
+
     it('trusts proxy and correctly derives client IP from x-forwarded-for', async () => {
       const proxyApp = buildApp({
         jwtSecret: 'test-secret',

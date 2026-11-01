@@ -40,10 +40,27 @@ export function buildApp(config?: AppConfig): FastifyInstance {
 
   // 1. CORS Headers
   const corsOriginEnv = process.env['CORS_ORIGIN'];
-  let corsOrigin: boolean | string | string[] = true;
+  let corsOrigin: any = true;
   if (corsOriginEnv) {
     const origins = corsOriginEnv.split(',').map((s) => s.trim()).filter(Boolean);
-    corsOrigin = origins.length === 1 ? origins[0]! : origins;
+    if (origins.includes('*') || origins.includes('true')) {
+      corsOrigin = true;
+    } else if (origins.some((o) => o.includes('*'))) {
+      corsOrigin = (origin: string | undefined, cb: (err: Error | null, allow: boolean) => void) => {
+        if (!origin) return cb(null, true);
+        const allowed = origins.some((pattern) => {
+          if (pattern === origin) return true;
+          if (pattern.includes('*')) {
+            const regex = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+            return regex.test(origin);
+          }
+          return false;
+        });
+        cb(null, allowed);
+      };
+    } else {
+      corsOrigin = origins.length === 1 ? origins[0]! : origins;
+    }
   }
 
   app.register(fastifyCors, {
