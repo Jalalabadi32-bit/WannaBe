@@ -4,6 +4,9 @@
   "private": true,
   "description": "Trust the Source. Verify the Package. Automated Software Supply Chain Security & Source-to-Package Verification Engine.",
   "license": "MIT",
+  "engines": {
+    "node": "24.x"
+  },
   "workspaces": [
     "packages/*"
   ],
