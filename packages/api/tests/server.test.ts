@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect, beforeAll, afterAll, afterEach } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { buildApp } from '../src/index.js';
 
@@ -220,4 +220,81 @@ describe('Fastify REST API Server Route Injections', () => {
       expect(body.total).toBeGreaterThan(0);
     });
   });
+
+  describe('Production Hardening & Deployment Guards', () => {
+    const originalEnv = { ...process.env };
+
+    afterEach(() => {
+      process.env = { ...originalEnv };
+    });
+
+    it('throws fatal error in production if JWT_SECRET is default or unset', () => {
+      process.env['NODE_ENV'] = 'production';
+      process.env['JWT_SECRET'] = 'wannabe-dev-secret';
+      process.env['WANNABE_API_KEY'] = 'strong-production-api-key-12345';
+
+      expect(() => buildApp()).toThrow(/Production mode detected.*JWT_SECRET/);
+    });
+
+    it('throws fatal error in production if WANNABE_API_KEY is default or unset', () => {
+      process.env['NODE_ENV'] = 'production';
+      process.env['JWT_SECRET'] = 'strong-production-jwt-secret-12345';
+      process.env['WANNABE_API_KEY'] = 'wannabe-dev-api-key';
+
+      expect(() => buildApp()).toThrow(/Production mode detected.*WANNABE_API_KEY/);
+    });
+
+    it('boots successfully in production when strong secrets are provided', async () => {
+      process.env['NODE_ENV'] = 'production';
+      process.env['JWT_SECRET'] = 'c028a3f749b5c81de3f4a8e0f9b1d743';
+      process.env['WANNABE_API_KEY'] = 'd41d8cd98f00b204e9800998ecf8427e';
+
+      const prodApp = buildApp();
+      await prodApp.ready();
+
+      const res = await prodApp.inject({ method: 'GET', url: '/healthz' });
+      expect(res.statusCode).toBe(200);
+      await prodApp.close();
+    });
+
+    it('respects CORS_ORIGIN env variable for single or multiple origins', async () => {
+      process.env['CORS_ORIGIN'] = 'https://dashboard.wannabe.dev, https://app.wannabe.dev';
+      const corsApp = buildApp({
+        jwtSecret: 'test-secret',
+        apiKey: 'test-key'
+      });
+      await corsApp.ready();
+
+      const resAllowed = await corsApp.inject({
+        method: 'OPTIONS',
+        url: '/healthz',
+        headers: {
+          origin: 'https://dashboard.wannabe.dev',
+          'access-control-request-method': 'GET'
+        }
+      });
+      expect(resAllowed.headers['access-control-allow-origin']).toBe('https://dashboard.wannabe.dev');
+
+      await corsApp.close();
+    });
+
+    it('trusts proxy and correctly derives client IP from x-forwarded-for', async () => {
+      const proxyApp = buildApp({
+        jwtSecret: 'test-secret',
+        apiKey: 'test-key'
+      });
+      await proxyApp.ready();
+
+      const res = await proxyApp.inject({
+        method: 'GET',
+        url: '/healthz',
+        headers: {
+          'x-forwarded-for': '203.0.113.195, 10.0.0.1'
+        }
+      });
+      expect(res.statusCode).toBe(200);
+      await proxyApp.close();
+    });
+  });
 });
+
