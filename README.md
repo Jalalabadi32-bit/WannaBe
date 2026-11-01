@@ -57,6 +57,38 @@ ollama pull gemma3:4b
 
 ---
 
+## Docker Quick Start
+
+Launch the entire stack with one command — no local Node.js or toolchain required:
+
+```bash
+# 1. Copy and configure environment (optional — defaults work for development)
+cp .env.example .env
+
+# 2. Build and launch all services
+docker compose up --build
+
+# 3. Open the dashboard
+open http://localhost:8080
+```
+
+| Service | URL |
+|---|---|
+| **Frontend Dashboard** | [http://localhost:8080](http://localhost:8080) |
+| **REST API** | [http://localhost:3000](http://localhost:3000) |
+| **Ollama** | [http://localhost:11434](http://localhost:11434) |
+| **Prometheus** | [http://localhost:9090](http://localhost:9090) |
+
+> **GPU acceleration**: Uncomment the `deploy.resources` block in `docker-compose.yml`
+> and install [nvidia-container-toolkit](https://docs.nvidia.com/datacenter/cloud-native/container-toolkit/).
+
+To stop and clean up:
+```bash
+docker compose down -v   # -v removes volumes (Redis data, model cache)
+```
+
+---
+
 ## Setup
 
 ```bash
