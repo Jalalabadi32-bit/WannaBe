@@ -86,6 +86,109 @@ describe('Core Caching Tier', () => {
     });
   });
 
+  describe('RedisCacheStore — connected-client paths (mock client)', () => {
+    // Build a fake Redis client that simulates a live connection so we can
+    // reach the branches that require isConnected === true.
+    function makeMockClient(overrides: Record<string, unknown> = {}) {
+      return {
+        status: 'ready',
+        on: vi.fn(),
+        get: vi.fn().mockResolvedValue(null),
+        set: vi.fn().mockResolvedValue('OK'),
+        del: vi.fn().mockResolvedValue(1),
+        exists: vi.fn().mockResolvedValue(0),
+        quit: vi.fn().mockResolvedValue('OK'),
+        disconnect: vi.fn(),
+        connect: vi.fn().mockResolvedValue(undefined),
+        ...overrides
+      };
+    }
+
+    it('get() returns the parsed value when Redis has the key', async () => {
+      const mockClient = makeMockClient({
+        get: vi.fn().mockResolvedValue(JSON.stringify({ name: 'lodash' }))
+      });
+
+      const store = new RedisCacheStore({});
+      // Inject the mock client and mark as connected
+      (store as unknown as { client: unknown; isConnected: boolean }).client = mockClient;
+      (store as unknown as { isConnected: boolean }).isConnected = true;
+
+      const result = await store.get<{ name: string }>('pkg:lodash');
+      expect(result).toEqual({ name: 'lodash' });
+    });
+
+    it('get() returns null on cache miss', async () => {
+      const mockClient = makeMockClient({ get: vi.fn().mockResolvedValue(null) });
+      const store = new RedisCacheStore({});
+      (store as unknown as { client: unknown; isConnected: boolean }).client = mockClient;
+      (store as unknown as { isConnected: boolean }).isConnected = true;
+
+      expect(await store.get('missing-key')).toBeNull();
+    });
+
+    it('set() with TTL calls Redis SET EX', async () => {
+      const mockSet = vi.fn().mockResolvedValue('OK');
+      const mockClient = makeMockClient({ set: mockSet });
+      const store = new RedisCacheStore({});
+      (store as unknown as { client: unknown; isConnected: boolean }).client = mockClient;
+      (store as unknown as { isConnected: boolean }).isConnected = true;
+
+      await store.set('key', { value: 42 }, 300);
+      expect(mockSet).toHaveBeenCalledWith(
+        expect.stringContaining('key'),
+        JSON.stringify({ value: 42 }),
+        'EX',
+        300
+      );
+    });
+
+    it('set() without TTL calls Redis SET without EX', async () => {
+      const mockSet = vi.fn().mockResolvedValue('OK');
+      const mockClient = makeMockClient({ set: mockSet });
+      const store = new RedisCacheStore({});
+      (store as unknown as { client: unknown; isConnected: boolean }).client = mockClient;
+      (store as unknown as { isConnected: boolean }).isConnected = true;
+
+      await store.set('noTTL', 'hello');
+      // Should be called with just key + value (2 args), not EX
+      expect(mockSet).toHaveBeenCalledWith(
+        expect.stringContaining('noTTL'),
+        JSON.stringify('hello')
+      );
+    });
+
+    it('has() returns true when key exists', async () => {
+      const mockClient = makeMockClient({ exists: vi.fn().mockResolvedValue(1) });
+      const store = new RedisCacheStore({});
+      (store as unknown as { client: unknown; isConnected: boolean }).client = mockClient;
+      (store as unknown as { isConnected: boolean }).isConnected = true;
+
+      expect(await store.has('existing-key')).toBe(true);
+    });
+
+    it('del() calls Redis del on the prefixed key', async () => {
+      const mockDel = vi.fn().mockResolvedValue(1);
+      const mockClient = makeMockClient({ del: mockDel });
+      const store = new RedisCacheStore({ keyPrefix: 'test:' });
+      (store as unknown as { client: unknown; isConnected: boolean }).client = mockClient;
+      (store as unknown as { isConnected: boolean }).isConnected = true;
+
+      await store.del('mykey');
+      expect(mockDel).toHaveBeenCalledWith('test:mykey');
+    });
+
+    it('close() calls quit when client is not ended', async () => {
+      const mockQuit = vi.fn().mockResolvedValue('OK');
+      const mockClient = makeMockClient({ status: 'ready', quit: mockQuit });
+      const store = new RedisCacheStore({});
+      (store as unknown as { client: unknown }).client = mockClient;
+
+      await store.close();
+      expect(mockQuit).toHaveBeenCalledOnce();
+    });
+  });
+
   describe('createCacheStore factory', () => {
     it('creates InMemoryCacheStore by default', () => {
       const store = createCacheStore();

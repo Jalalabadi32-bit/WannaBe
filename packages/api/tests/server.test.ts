@@ -219,6 +219,40 @@ describe('Fastify REST API Server Route Injections', () => {
       expect(Array.isArray(body.items)).toBe(true);
       expect(body.total).toBeGreaterThan(0);
     });
+
+    it('GET /api/v1/scans/:id/report returns 404 for unknown scan', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/scans/00000000-0000-0000-0000-ffffffffffff/report',
+        headers: { 'x-api-key': testApiKey }
+      });
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.error).toBe('Not Found');
+    });
+
+    it('GET /api/v1/scans/:id/stream returns 404 for unknown scan', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/scans/00000000-0000-0000-0000-eeeeeeeeeeee/stream'
+      });
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.error).toBe('Not Found');
+    });
+  });
+
+  describe('Custom 404 handler', () => {
+    it('unknown route returns 404 with structured error body', async () => {
+      const response = await app.inject({
+        method: 'GET',
+        url: '/api/v1/does-not-exist'
+      });
+      expect(response.statusCode).toBe(404);
+      const body = JSON.parse(response.body);
+      expect(body.statusCode).toBe(404);
+      expect(body.error).toBe('Not Found');
+    });
   });
 
   describe('Production Hardening & Deployment Guards', () => {

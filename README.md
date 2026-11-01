@@ -7,6 +7,7 @@
 [![Hacktoberfest HackDay](https://img.shields.io/badge/Hacktoberfest-HackDay%20Sonipat-orange.svg)](HACKATHON.md)
 [![Problem Statement](https://img.shields.io/badge/Problem%20Statement-PS%204-purple.svg)](HACKATHON.md)
 [![Tests](https://img.shields.io/badge/Tests-84%20passing-brightgreen.svg)](#testing)
+[![Coverage](https://img.shields.io/badge/Coverage-80%25%2B-brightgreen.svg)](#testing)
 
 ---
 
