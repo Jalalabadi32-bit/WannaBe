@@ -13,13 +13,58 @@ export interface AppConfig {
 }
 
 export function buildApp(config?: AppConfig): FastifyInstance {
+  const isProd = process.env['NODE_ENV'] === 'production';
+  const jwtSecret = config?.jwtSecret ?? process.env['JWT_SECRET'];
+  const apiKey = config?.apiKey ?? process.env['WANNABE_API_KEY'];
+
+  if (isProd) {
+    if (!jwtSecret || jwtSecret === 'wannabe-dev-secret' || jwtSecret === 'wannabe-dev-insecure-secret-key-change-in-prod') {
+      throw new Error(
+        'FATAL: Production mode detected (NODE_ENV=production) but JWT_SECRET is unset or using an insecure default value. ' +
+        'Please generate a cryptographically strong secret (e.g. openssl rand -hex 32) and set JWT_SECRET.'
+      );
+    }
+    if (!apiKey || apiKey === 'wannabe-dev-api-key') {
+      throw new Error(
+        'FATAL: Production mode detected (NODE_ENV=production) but WANNABE_API_KEY is unset or using an insecure default value. ' +
+        'Please generate a cryptographically strong API key and set WANNABE_API_KEY.'
+      );
+    }
+  }
+
   const app = Fastify({
-    logger: config?.logLevel ? { level: config.logLevel } : false
+    logger: config?.logLevel ? { level: config.logLevel } : false,
+    trustProxy: true,
+    bodyLimit: 25 * 1024 * 1024 // 25 MB max request size
   });
 
   // 1. CORS Headers
+  const corsOriginEnv = process.env['CORS_ORIGIN'];
+  let corsOrigin: any = true;
+  if (corsOriginEnv) {
+    const origins = corsOriginEnv.split(',').map((s) => s.trim()).filter(Boolean);
+    if (origins.includes('*') || origins.includes('true')) {
+      corsOrigin = true;
+    } else if (origins.some((o) => o.includes('*'))) {
+      corsOrigin = (origin: string | undefined, cb: (err: Error | null, allow: boolean) => void) => {
+        if (!origin) return cb(null, true);
+        const allowed = origins.some((pattern) => {
+          if (pattern === origin) return true;
+          if (pattern.includes('*')) {
+            const regex = new RegExp('^' + pattern.replace(/\./g, '\\.').replace(/\*/g, '.*') + '$');
+            return regex.test(origin);
+          }
+          return false;
+        });
+        cb(null, allowed);
+      };
+    } else {
+      corsOrigin = origins.length === 1 ? origins[0]! : origins;
+    }
+  }
+
   app.register(fastifyCors, {
-    origin: true,
+    origin: corsOrigin,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS']
   });
 
@@ -31,8 +76,8 @@ export function buildApp(config?: AppConfig): FastifyInstance {
 
   // 3. Auth plugin (JWT verify + X-API-Key + RBAC)
   app.register(authPlugin, {
-    jwtSecret: config?.jwtSecret ?? process.env['JWT_SECRET'] ?? 'wannabe-dev-insecure-secret-key-change-in-prod',
-    apiKey: config?.apiKey ?? process.env['WANNABE_API_KEY'] ?? 'wannabe-dev-api-key'
+    jwtSecret: jwtSecret ?? 'wannabe-dev-insecure-secret-key-change-in-prod',
+    apiKey: apiKey ?? 'wannabe-dev-api-key'
   });
 
   // 4. System Routes (/healthz, /readyz, /metrics)

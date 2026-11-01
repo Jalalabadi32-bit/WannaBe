@@ -9,8 +9,10 @@
   ],
   "scripts": {
     "build": "npm run build --workspaces --if-present",
+    "build:api": "npm run build --workspace=@wannabe/shared && npm run build --workspace=@wannabe/core && npm run build --workspace=@wannabe/api",
+    "build:frontend": "npm run build --workspace=@wannabe/shared && npm run build --workspace=@wannabe/frontend",
+    "start:api": "node -e \"import('./packages/api/dist/server.js').then(m => m.startServer())\"",
     "dev:frontend": "npm run dev --workspace=@wannabe/frontend",
-    "build:frontend": "npm run build --workspace=@wannabe/frontend",
     "typecheck": "tsc -b",
     "test": "vitest run --passWithNoTests",
     "clean": "rimraf packages/*/dist packages/*/tsconfig.tsbuildinfo"

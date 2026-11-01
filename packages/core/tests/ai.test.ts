@@ -106,4 +106,31 @@ describe('HybridAIExplainer', () => {
     expect(verdict.riskLevel).toBe('clean');
     expect(verdict.modelAttribution).toContain('Deterministic Security Heuristic Engine');
   });
+
+  it('activates deterministic mode automatically when WANNABE_FORCE_DETERMINISTIC_AI env is set', async () => {
+    const original = process.env['WANNABE_FORCE_DETERMINISTIC_AI'];
+    process.env['WANNABE_FORCE_DETERMINISTIC_AI'] = 'true';
+
+    let fetchCalled = false;
+    const mockFetch = async () => {
+      fetchCalled = true;
+      throw new Error('Should not be called');
+    };
+
+    try {
+      const explainer = new HybridAIExplainer({ fetchFn: mockFetch });
+      const verdict = await explainer.explain(target, [], [], cleanSummary);
+
+      expect(fetchCalled).toBe(false);
+      expect(verdict.riskLevel).toBe('clean');
+      expect(verdict.modelAttribution).toContain('Deterministic Security Heuristic Engine');
+    } finally {
+      if (original !== undefined) {
+        process.env['WANNABE_FORCE_DETERMINISTIC_AI'] = original;
+      } else {
+        delete process.env['WANNABE_FORCE_DETERMINISTIC_AI'];
+      }
+    }
+  });
 });
+

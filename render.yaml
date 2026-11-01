@@ -1,0 +1,29 @@
+services:
+  # ─── WANNABE Fastify REST API Gateway (Render Free Web Service) ─────────
+  - type: web
+    name: wannabe-api
+    runtime: node
+    plan: free
+    region: oregon
+    buildCommand: npm ci && npm run build:api
+    startCommand: npm run start:api
+    healthCheckPath: /healthz
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: HOST
+        value: 0.0.0.0
+      # Activate built-in deterministic AI engine (0ms inference, zero GPU/Ollama required)
+      - key: WANNABE_FORCE_DETERMINISTIC_AI
+        value: "true"
+      # Auto-generate secure 64-character cryptographic tokens
+      - key: JWT_SECRET
+        generateValue: true
+      - key: WANNABE_API_KEY
+        generateValue: true
+      # Allow all Vercel preview & production subdomains + local testing
+      - key: CORS_ORIGIN
+        value: "https://*.vercel.app,http://localhost:5173"
+      # Forward real client IP from Render reverse proxy
+      - key: TRUST_PROXY
+        value: "true"

@@ -113,6 +113,38 @@ npm run dev
 # Vite dev server at http://localhost:5173
 ```
 
+## Public Deployment
+
+### Option A — 100% Free Cloud Tier (Vercel + Render)
+
+Deploy at zero cost using cloud free tiers:
+- **Frontend**: [Vercel Hobby](https://vercel.com) via [`vercel.json`](vercel.json)
+- **API**: [Render Free](https://render.com) via 1-click [`render.yaml`](render.yaml) Blueprint
+- **AI**: Built-in deterministic security heuristic engine (0ms latency, zero GPU/RAM overhead)
+- **Cache**: In-memory with no database required
+
+See the [Free-Tier Deployment Guide](docs/FREE_TIER_DEPLOYMENT.md) for 5-minute setup instructions.
+
+### Option B — Self-Hosted Docker (VPS / Cloud VM)
+
+Hardened self-hosted deployment with automated TLS (Let's Encrypt / Certbot), Nginx reverse proxying, rate limiting, and zero exposed backend ports.
+
+```bash
+# 1. Copy production environment template and generate random secrets
+cp .env.production.example .env
+
+# 2. Run pre-flight check
+bash deploy/validate-prod.sh
+
+# 3. Start production containers
+docker compose -f docker-compose.prod.yml up -d --build
+
+# 4. Provision Let's Encrypt SSL certificate
+bash deploy/init-ssl.sh
+```
+
+For complete cloud VPS setup, firewall configuration, DNS setup, and maintenance guides, see the [Production Deployment Guide](docs/DEPLOYMENT.md).
+
 ---
 
 ## CLI usage

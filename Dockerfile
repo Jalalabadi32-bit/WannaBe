@@ -3,7 +3,7 @@ FROM node:22-alpine AS builder
 
 WORKDIR /app
 
-# Install build dependencies
+# Install build dependencies (package manifests first for layer caching)
 COPY package.json package-lock.json tsconfig.base.json tsconfig.json ./
 COPY packages/shared/package.json ./packages/shared/
 COPY packages/core/package.json ./packages/core/
@@ -12,8 +12,11 @@ COPY packages/cli/package.json ./packages/cli/
 
 RUN npm ci
 
-# Copy source code and build all workspaces
-COPY packages ./packages
+# Copy source code and build all backend workspaces
+COPY packages/shared ./packages/shared
+COPY packages/core ./packages/core
+COPY packages/api ./packages/api
+COPY packages/cli ./packages/cli
 RUN npm run build
 
 # Production runtime stage
@@ -24,11 +27,9 @@ ENV NODE_ENV=production
 ENV PORT=3000
 ENV HOST=0.0.0.0
 
-# Install runtime tools (curl for healthchecks)
-RUN apk add --no-cache curl
-
-# Create non-root system user and sandbox directories
-RUN addgroup -S wannabe && adduser -S wannabe -G wannabe \
+# Install runtime tools (curl for healthchecks, git for GitFetcher)
+RUN apk add --no-cache curl git \
+    && addgroup -S wannabe && adduser -S wannabe -G wannabe \
     && mkdir -p /tmp/wannabe-sandboxes \
     && chown -R wannabe:wannabe /tmp/wannabe-sandboxes
 

@@ -1,0 +1,165 @@
+services:
+  # ─── Frontend & TLS Reverse Proxy (Nginx + Vite build) ───────────
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    container_name: wannabe-frontend
+    restart: always
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./deploy/certs:/etc/nginx/certs:ro
+      - certbot_www:/var/www/certbot:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "--no-check-certificate", "https://localhost/readyz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ─── API Gateway (Fastify) ─────────────────────────────────────────
+  api:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: wannabe-api
+    restart: always
+    expose:
+      - "3000"
+    environment:
+      - NODE_ENV=production
+      - PORT=3000
+      - HOST=0.0.0.0
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set in production}
+      - WANNABE_API_KEY=${WANNABE_API_KEY:?WANNABE_API_KEY must be set in production}
+      - REDIS_URL=redis://:${REDIS_PASSWORD}@redis:6379
+      - OLLAMA_HOST=http://ollama:11434
+      - CORS_ORIGIN=${CORS_ORIGIN:-https://${DOMAIN_NAME}}
+      - TRUST_PROXY=true
+    depends_on:
+      redis:
+        condition: service_healthy
+      ollama:
+        condition: service_started
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/healthz"]
+      interval: 15s
+      timeout: 5s
+      retries: 3
+      start_period: 10s
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ─── Redis (Authenticated, Internal Cache Tier) ───────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: wannabe-redis
+    restart: always
+    expose:
+      - "6379"
+    environment:
+      - REDIS_PASSWORD=${REDIS_PASSWORD:?REDIS_PASSWORD must be set in production}
+    command: ["sh", "-c", "redis-server --requirepass \"$$REDIS_PASSWORD\" --save 60 1 --loglevel warning"]
+    volumes:
+      - redis_data:/data
+    healthcheck:
+      test: ["CMD", "sh", "-c", "redis-cli -a \"$$REDIS_PASSWORD\" ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ─── Ollama (Local AI Inference, Internal Network Only) ───────────
+  ollama:
+    image: ollama/ollama:latest
+    container_name: wannabe-ollama
+    restart: always
+    expose:
+      - "11434"
+    volumes:
+      - ollama_models:/root/.ollama
+    # For GPU acceleration on NVIDIA hosts, uncomment the deploy block:
+    # deploy:
+    #   resources:
+    #     reservations:
+    #       devices:
+    #         - driver: nvidia
+    #           count: 1
+    #           capabilities: [gpu]
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ─── Ollama Model Bootstrap (One-shot Init) ────────────────────────
+  ollama-init:
+    image: alpine:3.19
+    container_name: wannabe-ollama-init
+    restart: "no"
+    depends_on:
+      ollama:
+        condition: service_started
+    environment:
+      - OLLAMA_HOST=http://ollama:11434
+      - WANNABE_MODEL=${WANNABE_MODEL:-gemma3:4b}
+      - WANNABE_SKIP_MODEL_PULL=${WANNABE_SKIP_MODEL_PULL:-0}
+    volumes:
+      - ./deploy/ollama-init.sh:/init.sh:ro
+    entrypoint: ["sh", "/init.sh"]
+
+  # ─── Prometheus (Monitoring Scraper, Loopback Binding Only) ───────
+  prometheus:
+    image: prom/prometheus:v2.51.0
+    container_name: wannabe-prometheus
+    restart: always
+    ports:
+      # Bound strictly to host loopback interface — NOT exposed to the public internet
+      - "127.0.0.1:9090:9090"
+    volumes:
+      - ./deploy/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - ./deploy/prometheus-alerts.yaml:/etc/prometheus/prometheus-alerts.yaml:ro
+      - prometheus_data:/prometheus
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.path=/prometheus
+    depends_on:
+      - api
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "20m"
+        max-file: "5"
+
+  # ─── Certbot (Automated TLS Certificate Renewal) ───────────────────
+  certbot:
+    image: certbot/certbot:latest
+    container_name: wannabe-certbot
+    restart: always
+    volumes:
+      - ./deploy/certs:/etc/letsencrypt
+      - certbot_www:/var/www/certbot
+    # Automatically attempts renewal every 12 hours
+    entrypoint: "/bin/sh -c 'trap exit TERM; while :; do certbot renew; sleep 12h & wait $${!}; done;'"
+
+volumes:
+  redis_data:
+  ollama_models:
+  prometheus_data:
+  certbot_www:

@@ -32,7 +32,11 @@ export class HybridAIExplainer implements IAIExplainer {
     this.modelName = options.modelName ?? process.env['OLLAMA_MODEL'] ?? 'gemma2:2b';
     this.timeoutMs = options.timeoutMs ?? 2000;
     this.fetch = options.fetchFn ?? globalThis.fetch;
-    this.forceDeterministic = options.forceDeterministic ?? false;
+    this.forceDeterministic =
+      options.forceDeterministic ??
+      (process.env['WANNABE_FORCE_DETERMINISTIC_AI'] === 'true' ||
+        process.env['WANNABE_DETERMINISTIC_AI'] === 'true' ||
+        process.env['OLLAMA_DISABLED'] === 'true');
 
     if (options.useBreaker) {
       this.breaker = createOllamaBreaker(async (t, d, f, s) => {
